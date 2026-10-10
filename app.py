@@ -1,10 +1,13 @@
 import unicodedata
+from datetime import date, datetime, timedelta
 from html import escape
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import pydeck as pdk
 import streamlit as st
 
+from clima import CONDICOES, historico, previsao, sol
 from dados import (
     CATEGORIAS,
     DICAS_SEGURANCA,
@@ -17,7 +20,10 @@ from dados import (
     PERFIS,
     REGIOES,
     ROTAS,
+    LOCAL_TEMPO,
     TARIFA_HEATHROW,
+    VIAGEM_FIM,
+    VIAGEM_INICIO,
 )
 
 st.set_page_config(page_title="Painel para Londres", page_icon="🗺", layout="wide")
@@ -169,6 +175,21 @@ a.maps:hover { text-decoration: underline; }
 .alerta.laranja { background: var(--warn-bg); color: var(--warn); }
 .alerta.vermelho { background: var(--bad-bg); color: var(--bad); }
 
+/* tempo e luz */
+.dias { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
+.dia { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; }
+.dia-data { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--red); }
+.dia-icone { font-size: 30px; line-height: 1; margin: 10px 0 4px; }
+.dia-cond { font-size: 13px; color: var(--text2); min-height: 20px; }
+.dia-temp { font-size: 26px; font-weight: 600; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.dia-temp span { font-size: 16px; font-weight: 500; color: var(--text3); }
+.dia-chuva { font-size: 12px; color: var(--text2); min-height: 18px; }
+.dia-sol { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.dia-sol div { display: flex; justify-content: space-between; font-size: 12px; color: var(--text); padding: 2px 0;
+  font-variant-numeric: tabular-nums; font-weight: 500; }
+.dia-sol span { color: var(--text3); font-weight: 400; }
+.dia-fonte { margin-top: auto; padding-top: 8px; font-size: 11px; color: var(--text3); font-style: italic; }
+
 @media (max-width: 640px) {
   .titulo { font-size: 32px; }
   .duas-col, .tiles, .ramais { grid-template-columns: 1fr; }
@@ -272,8 +293,9 @@ html(
     "temática e monte o dia. Cada parada abre direto no Google Maps.</div>"
 )
 
-aba_pontos, aba_rotas, aba_gastos, aba_seguranca = st.tabs(
-    ["Por pontos famosos", "Rotas temáticas", "Estimativa de gastos", "Segurança & Heathrow"], key="aba"
+aba_pontos, aba_rotas, aba_gastos, aba_seguranca, aba_tempo = st.tabs(
+    ["Por pontos famosos", "Rotas temáticas", "Estimativa de gastos", "Segurança & Heathrow", "Tempo & luz"],
+    key="aba",
 )
 
 
@@ -598,6 +620,134 @@ with aba_seguranca:
             f'<div class="alerta laranja">💡 Pegou o trem errado? {escape(h["trem_errado"])}</div>'
             f'<div class="rotulo">Horários e alternativas</div><div class="bloco">{fatos}</div>'
         )
+
+
+# ---------------------------------------------------------------------------
+# Aba 5: tempo e luz do dia
+# ---------------------------------------------------------------------------
+DIAS_SEMANA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
+MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
+         "outubro", "novembro", "dezembro"]
+JANELA_PREVISAO = 15  # a Open-Meteo prevê hoje + 15 dias
+
+
+def hora(momento) -> str:
+    return (momento + timedelta(seconds=30)).strftime("%H:%M")
+
+
+def duracao(delta: timedelta) -> str:
+    minutos = round(delta.total_seconds() / 60)
+    return f"{minutos // 60}h{minutos % 60:02d}"
+
+
+def data_curta(dia: date) -> str:
+    return f"{DIAS_SEMANA[dia.weekday()][:3]}, {dia.day} {MESES[dia.month - 1][:3]}"
+
+
+def data_longa(dia: date) -> str:
+    return f"{DIAS_SEMANA[dia.weekday()]}, {dia.day} de {MESES[dia.month - 1]}"
+
+
+def fim_horario_verao(ano: int) -> date:
+    """Último domingo de outubro, quando os relógios britânicos atrasam 1 hora."""
+    dia = date(ano, 10, 31)
+    return dia - timedelta(days=(dia.weekday() + 1) % 7)
+
+
+with aba_tempo:
+    lat, lon = LOCAL_TEMPO
+    hoje = date.today()
+    dias = [VIAGEM_INICIO + timedelta(days=i) for i in range((VIAGEM_FIM - VIAGEM_INICIO).days + 1)]
+
+    try:
+        prev = previsao(lat, lon)
+    except Exception:
+        prev, falha_previsao = {}, True
+    else:
+        falha_previsao = False
+    try:
+        hist = historico(lat, lon, VIAGEM_INICIO, VIAGEM_FIM)
+    except Exception:
+        hist = {}
+
+    html(
+        f'<div class="rotulo">Tempo e luz do dia na viagem</div>'
+        f'<div class="descricao">De {data_longa(VIAGEM_INICIO)}, a {data_longa(VIAGEM_FIM)}, em Londres. '
+        "Quando a data ainda está longe para ter previsão, o cartão mostra a média dos últimos dez anos.</div>"
+    )
+
+    cartoes, sois = [], []
+    for dia in dias:
+        s = sol(dia, lat, lon)
+        sois.append(s)
+        p = prev.get(dia.isoformat())
+        h = hist.get(dia.strftime("%m-%d"))
+        if p:
+            emoji, condicao = CONDICOES.get(p["codigo"], ("🌡", "Sem descrição"))
+            temp = f'{p["max"]:.0f}° <span>/ {p["min"]:.0f}°</span>'
+            chuva = f'💧 {p["chance"]:.0f}% de chance de chuva' if p["chance"] is not None else ""
+            fonte = "Previsão de longo prazo, muda bastante" if (dia - hoje).days > 7 else "Previsão"
+        elif h:
+            emoji, condicao = "🗓", "Média de dez anos"
+            temp = f'{h["max"]:.0f}° <span>/ {h["min"]:.0f}°</span>'
+            chuva = f'💧 Choveu em {h["anos_chuva"]} de {h["anos"]} anos'
+            liberacao = dia - timedelta(days=JANELA_PREVISAO)
+            fonte = f"Previsão a partir de {liberacao.day}/{liberacao.month:02d}"
+        else:
+            emoji, condicao, temp, chuva, fonte = "🌡", "Sem dados agora", "–", "", ""
+        cartoes.append(
+            f'<div class="dia"><div class="dia-data">{data_curta(dia)}</div>'
+            f'<div class="dia-icone">{emoji}</div><div class="dia-cond">{condicao}</div>'
+            f'<div class="dia-temp">{temp}</div><div class="dia-chuva">{chuva}</div>'
+            '<div class="dia-sol">'
+            f'<div><span>Nascer do sol</span>{hora(s["nascer"])}</div>'
+            f'<div><span>Pôr do sol</span>{hora(s["por"])}</div>'
+            f'<div><span>Escuro</span>{hora(s["escuro"])}</div>'
+            f'<div><span>Luz do dia</span>{duracao(s["luz"])}</div>'
+            f'</div><div class="dia-fonte">{fonte}</div></div>'
+        )
+    html(f'<div class="dias">{"".join(cartoes)}</div>')
+    if falha_previsao:
+        html('<div class="aviso">Não consegui buscar a previsão agora. Os horários do sol continuam valendo.</div>')
+
+    # O que isso muda no roteiro
+    por = sorted(hora(s["por"]) for s in sois)
+    escuro = sorted(hora(s["escuro"]) for s in sois)
+    linhas = [
+        ("Fim da luz",
+         f"O sol se põe entre {por[0]} e {por[-1]}, e entre {escuro[0]} e {escuro[-1]} já está escuro. "
+         "Parques, mirantes ao ar livre e Greenwich ficam para a manhã ou o começo da tarde; museus, compras "
+         "e musicais, para depois."),
+    ]
+    mudanca = fim_horario_verao(VIAGEM_INICIO.year)
+    meio_dia = datetime(VIAGEM_INICIO.year, VIAGEM_INICIO.month, VIAGEM_INICIO.day, 12)
+    diferenca = (meio_dia.replace(tzinfo=ZoneInfo("Europe/London")).utcoffset()
+                 - meio_dia.replace(tzinfo=ZoneInfo("America/Sao_Paulo")).utcoffset())
+    fuso = f"Londres fica {round(diferenca.total_seconds() / 3600)} horas à frente de Brasília durante a viagem."
+    if 0 <= (VIAGEM_INICIO - mudanca).days <= 30:
+        fuso += (f" O horário de verão britânico termina em {mudanca.day}/{mudanca.month:02d}, antes da chegada; "
+                 "o celular ajusta sozinho.")
+    linhas.append(("Fuso", fuso))
+    if hist:
+        n = sum(v["anos"] for v in hist.values())
+        com_chuva = sum(v["anos_chuva"] for v in hist.values())
+        maxima = sum(v["max"] for v in hist.values()) / len(hist)
+        minima = sum(v["min"] for v in hist.values()) / len(hist)
+        linhas.append((
+            "Nessas datas, em anos anteriores",
+            f"Choveu ao menos 1 mm em {com_chuva} de {n} dias ({com_chuva / n:.0%}). "
+            f"Máxima média de {maxima:.0f}°C e mínima de {minima:.0f}°C: casaco, roupa em camadas e algo "
+            "que aguente chuva fina.",
+        ))
+    blocos = "".join(
+        f'<div class="zona"><span class="zona-nome">{escape(r)}</span><span class="zona-nota">{escape(t)}</span></div>'
+        for r, t in linhas
+    )
+    html(
+        f'<div class="rotulo">O que isso muda no roteiro</div><div class="bloco">{blocos}</div>'
+        '<div class="aviso">Previsão e histórico: Open-Meteo, atualizados a cada hora. Nascer e pôr do sol '
+        "calculados para o centro de Londres.</div>"
+    )
 
 
 # Rolagem até o conteúdo que acabou de abrir

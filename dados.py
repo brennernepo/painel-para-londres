@@ -4,6 +4,15 @@ Preços conferidos em outubro de 2026. Ingressos mudam com a data e a TfL reajus
 então trate os valores como referência e confira no site oficial antes de comprar.
 """
 
+from datetime import date
+
+# Datas da viagem, usadas na aba Tempo & luz
+VIAGEM_INICIO = date(2026, 10, 29)
+VIAGEM_FIM = date(2026, 11, 2)
+
+# Ponto de referência para previsão e horários do sol: centro de Londres
+LOCAL_TEMPO = (51.51, -0.13)
+
 # Cores oficiais das linhas da TfL
 LINHAS = {
     "Bakerloo": "#B36305",
