@@ -834,23 +834,39 @@ INGRESSOS = [
 # ---------------------------------------------------------------------------
 # Segurança
 # ---------------------------------------------------------------------------
-# (nome, nível, x, y) em um mapa esquemático de 760 x 420
+# Zonas do mapa: (nome, nível, latitude, longitude, raio em metros, observação).
+# O nível é uma orientação geral para turistas, pensando na volta para o hotel à noite;
+# não é estatística oficial de crime.
 MAPA_SEGURANCA = [
-    ("Notting Hill", "verde", 30, 120),
-    ("Camden", "atencao", 215, 30),
-    ("King's Cross", "atencao", 340, 30),
-    ("Hackney", "atencao", 580, 30),
-    ("Shoreditch", "atencao", 520, 110),
-    ("Kensington", "verde", 70, 200),
-    ("Soho & Mayfair", "verde", 220, 130),
-    ("Covent Garden", "verde", 360, 130),
-    ("City of London", "verde", 470, 190),
-    ("Westminster", "verde", 220, 215),
-    ("Chelsea", "verde", 90, 290),
-    ("South Bank", "verde", 370, 300),
-    ("Canary Wharf", "verde", 630, 200),
-    ("Greenwich", "verde", 610, 330),
-    ("Brixton", "atencao", 270, 355),
+    ("West End", "verde", 51.5122, -0.1345, 800,
+     "Soho, Mayfair, Covent Garden e Piccadilly. Cheio até a saída dos teatros. O risco é furto: celular na mão "
+     "na Oxford Street e em Piccadilly Circus é alvo comum."),
+    ("Westminster", "verde", 51.5004, -0.1305, 550,
+     "Movimentado de dia e de noite. Batedores de carteira na Westminster Bridge e o golpe dos copinhos."),
+    ("South Bank", "verde", 51.5058, -0.1050, 650,
+     "Beira-rio iluminada e com gente até tarde, do London Eye ao Borough Market."),
+    ("City of London", "verde", 51.5140, -0.0880, 700,
+     "Tranquila, mas esvazia depois das 21h e no fim de semana. Ruas desertas, não perigosas."),
+    ("Kensington", "verde", 51.4985, -0.1745, 700,
+     "Museus, hotéis e Knightsbridge. Um dos bairros mais calmos do centro."),
+    ("Chelsea", "verde", 51.4870, -0.1675, 600,
+     "Residencial e calmo. Só lota em dia de jogo em Stamford Bridge."),
+    ("Notting Hill", "verde", 51.5125, -0.2020, 650,
+     "Residencial e tranquilo. A exceção é o Carnaval de agosto, com multidão e furtos."),
+    ("Canary Wharf", "verde", 51.5050, -0.0200, 600,
+     "Área corporativa com seguranças e câmeras por todo lado. Vazia no fim de semana."),
+    ("Greenwich", "verde", 51.4815, -0.0060, 650,
+     "Tranquilo. À noite, fique perto do centro e da estação Cutty Sark."),
+    ("Camden", "atencao", 51.5395, -0.1430, 600,
+     "Divertido de dia. À noite há venda de droga e abordagem perto da estação Camden Town; fique nas ruas cheias."),
+    ("King's Cross", "atencao", 51.5310, -0.1235, 550,
+     "A estação e o Granary Square são movimentados; as ruas em volta esvaziam depois da meia-noite."),
+    ("Shoreditch", "atencao", 51.5258, -0.0785, 600,
+     "Vida noturna intensa. Furto de celular por gente de bicicleta e confusão na saída dos bares."),
+    ("Hackney", "atencao", 51.5455, -0.0560, 800,
+     "Bares em Dalston e na Mare Street. Fora das ruas principais, fica escuro e vazio tarde da noite."),
+    ("Brixton", "atencao", 51.4620, -0.1150, 650,
+     "Mercado e música ao vivo. Depois da meia-noite, prefira Uber a esperar ônibus na rua."),
 ]
 
 DICAS_SEGURANCA = [

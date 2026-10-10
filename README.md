@@ -5,7 +5,7 @@ Painel em Streamlit para planejar uma viagem a Londres. Tem quatro abas:
 - **Por pontos famosos**: 35 atrações com busca e filtro por região. Ao tocar numa delas, abre a região inteira, com o que ver, estações de metrô e dicas práticas.
 - **Rotas temáticas**: Rock, Pubs, Esporte, Premium, Harry Potter e Kids. As paradas vêm em ordem, e um link abre a rota completa no Google Maps.
 - **Estimativa de gastos**: escolha duração, perfil e número de pessoas e veja o total em libras, separado por categoria.
-- **Segurança & Heathrow**: mapa esquemático por área, dicas e o guia da Piccadilly Line até o aeroporto.
+- **Segurança & Heathrow**: mapa real de Londres com 14 áreas classificadas (toque numa delas para ver o motivo), dicas e o guia da Piccadilly Line até o aeroporto.
 
 ## Rodar no computador
 

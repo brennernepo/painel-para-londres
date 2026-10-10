@@ -2,6 +2,7 @@ import unicodedata
 from html import escape
 from urllib.parse import quote
 
+import pydeck as pdk
 import streamlit as st
 
 from dados import (
@@ -149,9 +150,14 @@ a.maps:hover { text-decoration: underline; }
 .barra i { display: block; height: 100%; border-radius: 4px; background: var(--orange); }
 
 /* segurança */
-.mapa { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; }
-.mapa-rolagem { overflow-x: auto; }
-.mapa-rolagem svg { min-width: 600px; }
+.legenda { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+.st-key-mapa_box { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--card); }
+.zona-grupo { padding: 12px 0 4px; border-bottom: 1px solid var(--border); }
+.zona-grupo:last-child { border-bottom: none; }
+.zona { display: grid; grid-template-columns: 130px 1fr; gap: 12px; padding: 8px 0; }
+.zona-nome { font-size: 13px; font-weight: 600; color: var(--text); }
+.zona-nota { font-size: 13px; color: var(--text2); line-height: 1.5; }
+@media (max-width: 520px) { .zona { grid-template-columns: 1fr; gap: 2px; } }
 .heathrow-linha { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
 .heathrow-cor { width: 6px; align-self: stretch; border-radius: 4px; background: #003688; }
 .ramais { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
@@ -219,6 +225,11 @@ def rolar_ate(chave: str) -> None:
     }}, 250);
     </script>"""
     st.html(script, unsafe_allow_javascript=True)
+
+
+def celular() -> bool:
+    agente = st.context.headers.get("User-Agent", "")
+    return "Mobi" in agente or "Android" in agente
 
 
 def selo(nivel: str) -> str:
@@ -455,35 +466,54 @@ with aba_gastos:
 # ---------------------------------------------------------------------------
 # Aba 4: segurança e Heathrow
 # ---------------------------------------------------------------------------
+# (cor da zona, cor do texto) por nível, em RGB
 CORES_MAPA = {
-    "verde": ("#E3F3EB", "#157A55", None),
-    "atencao": ("#FCEBD3", "#9A5306", "noite: atenção"),
-    "evitar": ("#FDE4E1", "#B42318", "evitar à noite"),
+    "verde": ((21, 122, 85), (17, 98, 68)),
+    "atencao": ((217, 119, 6), (138, 74, 5)),
+    "evitar": ((180, 35, 24), (150, 28, 19)),
 }
 
 
-def svg_mapa() -> str:
-    caixas = []
-    for nome, nivel, x, y in MAPA_SEGURANCA:
-        fundo, cor, sub = CORES_MAPA[nivel]
-        meio = y + (20 if sub else 29)
-        caixas.append(
-            f'<rect x="{x}" y="{y}" width="120" height="50" rx="10" fill="{fundo}"/>'
-            f'<text x="{x + 60}" y="{meio}" text-anchor="middle" font-size="13" font-weight="600" fill="{cor}">{escape(nome)}</text>'
-        )
-        if sub:
-            caixas.append(
-                f'<text x="{x + 60}" y="{y + 37}" text-anchor="middle" font-size="11" fill="{cor}">{sub}</text>'
-            )
-    rio = (
-        '<path d="M0,365 C120,370 200,360 250,330 S320,285 380,284 L560,284 C600,284 610,300 640,300 S720,285 760,290" '
-        'fill="none" stroke="#BFD6EA" stroke-width="9" stroke-linecap="round"/>'
-        '<text x="14" y="396" font-size="11" font-style="italic" fill="#6F8FAE">Rio Tâmisa</text>'
+# Deslocamento do rótulo, em pixels, para áreas vizinhas não sobreporem os nomes.
+# Calculado para caber sem colisão no celular (zoom 10.05) e no computador (zoom 10.9).
+DESLOCAMENTO_ROTULO = {
+    "West End": [-24, -18], "Westminster": [24, 12], "South Bank": [-24, 0], "City of London": [0, -6],
+    "Kensington": [0, 6], "Notting Hill": [24, 6], "Canary Wharf": [-8, 0], "Greenwich": [-16, 0],
+    "Camden": [0, -6], "King's Cross": [-24, 0],
+}
+
+
+def mapa_seguranca() -> pdk.Deck:
+    zonas = []
+    for nome, nivel, lat, lon, raio, nota in MAPA_SEGURANCA:
+        cor, texto = CORES_MAPA[nivel]
+        zonas.append({
+            "nome": nome, "nivel": NIVEIS_SEGURANCA[nivel], "nota": nota, "lat": lat, "lon": lon, "raio": raio,
+            "preenchimento": [*cor, 95], "borda": [*cor, 220], "cor_texto": [*texto, 255],
+            "deslocamento": DESLOCAMENTO_ROTULO.get(nome, [0, 0]),
+        })
+    circulos = pdk.Layer(
+        "ScatterplotLayer", zonas, id="zonas", get_position=["lon", "lat"], get_radius="raio",
+        get_fill_color="preenchimento", get_line_color="borda", stroked=True, line_width_min_pixels=1.5,
+        pickable=True, auto_highlight=True, highlight_color=[232, 119, 46, 110],
     )
-    return (
-        '<svg viewBox="0 0 760 410" role="img" aria-label="Mapa esquemático de segurança de Londres por área" '
-        'style="width:100%;height:auto;font-family:\'DM Sans\',sans-serif">'
-        + rio + "".join(caixas) + "</svg>"
+    rotulos = pdk.Layer(
+        "TextLayer", zonas, id="rotulos", get_position=["lon", "lat"], get_text="nome",
+        get_size=11 if celular() else 13, get_color="cor_texto", font_family="'DM Sans, sans-serif'", font_weight=700,
+        get_pixel_offset="deslocamento",
+        background=True, get_background_color=[255, 255, 255, 225], background_padding=[6, 3],
+    )
+    return pdk.Deck(
+        layers=[circulos, rotulos],
+        initial_view_state=pdk.ViewState(latitude=51.504, longitude=-0.104, zoom=10.05 if celular() else 10.9),
+        views=[pdk.View(type="MapView", controller={"scrollZoom": False, "dragRotate": False, "touchRotate": False})],
+        map_provider="carto", map_style="https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json",
+        tooltip={
+            "html": "<b>{nome}</b><br/><span style='opacity:.75'>{nivel}</span><br/>{nota}",
+            "style": {"backgroundColor": "#fff", "color": "#2B1E1A", "fontFamily": "DM Sans, sans-serif",
+                      "fontSize": "12px", "borderRadius": "10px", "padding": "8px 10px", "maxWidth": "260px",
+                      "boxShadow": "0 4px 14px rgba(43,30,26,.15)"},
+        },
     )
 
 
@@ -494,20 +524,42 @@ with aba_seguranca:
     )
 
     if secao == "🗺 Mapa":
-        niveis_usados = [n for n in NIVEIS_SEGURANCA if any(nv == n for _, nv, _, _ in MAPA_SEGURANCA)]
+        niveis_usados = [n for n in NIVEIS_SEGURANCA if any(z[1] == n for z in MAPA_SEGURANCA)]
         html(
             '<div class="rotulo">Mapa de segurança por área</div>'
             '<div class="descricao">Orientação geral para turistas, pensando sobretudo na volta para o hotel à noite. '
-            "O mapa é esquemático, sem escala.</div>"
+            "Toque numa área para ver o motivo da classificação.</div>"
+            '<div class="legenda">' + "".join(selo(n) for n in niveis_usados) + "</div>"
         )
-        resumo = "".join(
-            f'<div class="cat">{selo(n)}<div class="linha-r" style="margin-top:6px">'
-            + escape(", ".join(nome for nome, nv, _, _ in MAPA_SEGURANCA if nv == n)) + "</div></div>"
+        with st.container(key="mapa_box"):
+            evento = st.pydeck_chart(
+                mapa_seguranca(), height=360 if celular() else 470, on_select="rerun", key="mapa_seg"
+            )
+        html('<div class="aviso">Arraste para mover; dois cliques aproximam.</div>')
+
+        selecionadas = evento.selection.objects.get("zonas", []) if evento else []
+        if selecionadas:
+            z = selecionadas[0]
+            nivel = next(k for k, v in NIVEIS_SEGURANCA.items() if v == z["nivel"])
+            cor = "rgb({},{},{})".format(*CORES_MAPA[nivel][0])
+            html(
+                f'<div class="regiao" style="margin-top:12px"><div class="faixa" style="background:{cor}"></div>'
+                f'<div class="regiao-corpo"><div class="regiao-nome">{escape(z["nome"])}</div>{selo(nivel)}'
+                f'<div class="regiao-desc" style="margin:10px 0 0">{escape(z["nota"])}</div></div></div>'
+            )
+
+        grupos = "".join(
+            f'<div class="zona-grupo">{selo(n)}'
+            + "".join(
+                f'<div class="zona"><span class="zona-nome">{escape(nome)}</span>'
+                f'<span class="zona-nota">{escape(nota)}</span></div>'
+                for nome, nv, _, _, _, nota in MAPA_SEGURANCA if nv == n
+            )
+            + "</div>"
             for n in niveis_usados
         )
-        html(f'<div class="mapa"><div class="mapa-rolagem">{svg_mapa()}</div></div>')
         html(
-            f'<div class="bloco" style="margin-top:10px">{resumo}</div>'
+            f'<div class="rotulo">Todas as áreas</div><div class="bloco">{grupos}</div>'
             '<div class="aviso">Furto é o risco mais comum, e acontece justamente nas áreas tranquilas e cheias de '
             "turistas: Oxford Street, Westminster, mercados e metrô lotado.</div>"
         )
